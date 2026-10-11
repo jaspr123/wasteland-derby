@@ -1,0 +1,52 @@
+# Production stack on a Docker + Traefik host (Traefik on the host network, docker provider).
+# Served at https://ai.jteam.ca/WastelandDerby — Traefik strips the prefix before it reaches the app.
+# Secrets live in deploy/.env (POSTGRES_PASSWORD, ADMIN_NAMES, ADMIN_CODE); never commit it.
+name: wastelandderby
+services:
+  app:
+    build:
+      context: ..
+      args: { VITE_BASE: /WastelandDerby/ }
+    image: wastelandderby:latest
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      DATABASE_URL: postgres://derby:${POSTGRES_PASSWORD}@db:5432/derby
+      DEV_TOOLS: "0"
+      ADMIN_NAMES: ${ADMIN_NAMES:-}
+      ADMIN_CODE: ${ADMIN_CODE:-}
+      CORS_ORIGIN: https://ai.jteam.ca
+    ports: ["127.0.0.1:3102:3002"]
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.wastelandderby.rule=Host(`ai.jteam.ca`) && (PathPrefix(`/WastelandDerby`) || PathPrefix(`/wastelandderby`))"
+      - traefik.http.routers.wastelandderby.priority=100
+      - traefik.http.routers.wastelandderby.entrypoints=websecure
+      - traefik.http.routers.wastelandderby.tls.certresolver=letsencrypt
+      - traefik.http.routers.wastelandderby.middlewares=derby-slash,derby-strip
+      # /WastelandDerby (no slash, any case) -> /WastelandDerby/ so relative paths resolve.
+      - "traefik.http.middlewares.derby-slash.redirectregex.regex=^(https?://[^/]+)/(?i:wastelandderby)$$"
+      - "traefik.http.middlewares.derby-slash.redirectregex.replacement=$${1}/WastelandDerby/"
+      - traefik.http.middlewares.derby-slash.redirectregex.permanent=true
+      - traefik.http.middlewares.derby-strip.stripprefix.prefixes=/WastelandDerby,/wastelandderby
+      # Traefik (host network) reaches the container on its compose network, like the other sites.
+      - traefik.docker.network=wastelandderby_default
+      - traefik.http.services.wastelandderby.loadbalancer.server.port=3002
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: derby
+      POSTGRES_DB: derby
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U derby -d derby"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  dbdata:

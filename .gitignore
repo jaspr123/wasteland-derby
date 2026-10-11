@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.asset-cache/
+apps/server/data/
+apps/server/uploads/
+*.log
+.env
+.env.local
+*.blend1
+.qa/
+tools/scratch/
+__pycache__/
+*.pyc
+
+# Built by tools/blender/build_runners.py from your licensed Synty packs — build artifacts, never commit
+apps/client/public/assets/runners/
+apps/client/public/assets/environment.glb
